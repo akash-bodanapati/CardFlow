@@ -1,0 +1,14 @@
+# Backend setup
+backend/
+frontend/
+node_modules/
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv
+venv/
+
+# LangGraph checkpoints
+*.sqlite
