@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 
 from google.oauth2 import service_account
@@ -8,6 +9,7 @@ from googleapiclient.discovery import build
 from app.config import config
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+logger = logging.getLogger(__name__)
 
 
 class SheetsService:
@@ -18,29 +20,59 @@ class SheetsService:
 
     def _get_service(self):
         if not self._service:
-            if not os.path.exists(self.creds_path):
-                print(f"Credentials not found at {self.creds_path}")
+            logger.info(f"SheetsService: _get_service - credential path: '{self.creds_path}'")
+            exists = os.path.exists(self.creds_path)
+            logger.info(f"SheetsService: _get_service - credentials file exists: {exists}")
+            if exists:
+                try:
+                    size = os.path.getsize(self.creds_path)
+                    logger.info(f"SheetsService: _get_service - credentials file size: {size} bytes")
+                except Exception as size_err:
+                    logger.warning(f"SheetsService: Failed to get file size: {size_err}")
+
+            if not exists:
+                logger.error(f"SheetsService: Credentials not found at {self.creds_path}")
                 return None
-            creds = service_account.Credentials.from_service_account_file(
-                self.creds_path, scopes=SCOPES
-            )
-            self._service = build(
-                "sheets", "v4", credentials=creds, cache_discovery=False
-            )
+
+            try:
+                logger.info("SheetsService: Loading credentials from file...")
+                creds = service_account.Credentials.from_service_account_file(
+                    self.creds_path, scopes=SCOPES
+                )
+                logger.info("SheetsService: Credentials loaded successfully.")
+            except Exception as e:
+                logger.exception("SheetsService: Exception in from_service_account_file")
+                raise e
+
+            try:
+                logger.info("SheetsService: Building sheets v4 service (cache_discovery=False)...")
+                self._service = build(
+                    "sheets", "v4", credentials=creds, cache_discovery=False
+                )
+                logger.info("SheetsService: Service built successfully.")
+            except Exception as e:
+                logger.exception("SheetsService: Exception in build('sheets', 'v4')")
+                raise e
+
         return self._service
 
     async def get_all_rows(self) -> list[dict]:
+        logger.info("SheetsService: get_all_rows - calling _get_service()")
         service = self._get_service()
         if not service:
+            logger.warning("SheetsService: _get_service returned None")
             return []
 
         def _fetch():
+            logger.info("SheetsService: _fetch - preparing spreadsheets values get request")
             sheet = service.spreadsheets()
+            logger.info(f"SheetsService: _fetch - calling execute() for range Sheet1!A:H on sheet {self.sheet_id}")
             result = (
                 sheet.values()
                 .get(spreadsheetId=self.sheet_id, range="Sheet1!A:H")
                 .execute()
             )
+            logger.info("SheetsService: _fetch - execute() completed successfully")
             return result.get("values", [])
 
         try:
@@ -59,8 +91,8 @@ class SheetsService:
                 rows.append(row_dict)
             return rows
         except Exception as e:
-            print(f"Error fetching sheets: {e}")
-            return []
+            logger.exception("SheetsService: Exception inside get_all_rows")
+            raise e
 
     async def append_row(
         self, name: str, phone: str, email: str, company: str, session_id: str
