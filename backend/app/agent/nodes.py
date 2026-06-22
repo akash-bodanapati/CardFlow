@@ -384,13 +384,22 @@ async def enrich_company(state: AgentState) -> Dict[str, Any]:
             model=vision_service.model,
             contents=prompt,
         )
-        text = response.text.strip()
+        raw_response_text = getattr(response, "text", "")
+        logger.info(f"Raw Gemini response for company enrichment: '{raw_response_text}'")
+
+        text = raw_response_text.strip()
         if text.startswith("```"):
             text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
             text = re.sub(r"```$", "", text).strip()
-        data = json.loads(text)
-        logger.info(f"Company enrichment result for {company}: {data}")
-        return {"enriched_data": data}
+            
+        try:
+            data = json.loads(text)
+            logger.info(f"Company enrichment result for {company}: {data}")
+            return {"enriched_data": data}
+        except json.JSONDecodeError as decode_err:
+            logger.error(f"JSONDecodeError parsing company enrichment response. Raw text: '{text}'. Error: {decode_err}")
+            return {}
+            
     except Exception as e:
         logger.warning(f"Failed to enrich company {company}: {e}")
         return {}
