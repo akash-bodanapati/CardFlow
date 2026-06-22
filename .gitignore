@@ -1,14 +1,33 @@
-# Backend setup
-backend/
-frontend/
-node_modules/
+# Environment and Secrets
 .env
+.env.local
+.env.*.local
+service-account.json
+
+# Local Uploads and Databases
+uploads/
+backend/uploads/
+*.db
+*.sqlite
 
 # Python
 __pycache__/
-*.pyc
-.venv
+*.py[cod]
+*$py.class
+.venv/
 venv/
+.pytest_cache/
+.mypy_cache/
 
-# LangGraph checkpoints
-*.sqlite
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+.eslintcache
+build/
+.cache/
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
