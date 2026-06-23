@@ -15,6 +15,10 @@ def simulate_frontend_toasts(response_payload):
     details = response_payload.get("details", {})
     action = response_payload.get("action")
     
+    if details.get("duplicate_found") or action == "duplicate_check":
+        toasts.add("Duplicate contact found")
+        return toasts
+        
     # In the frontend, triggerResponseToasts uses an if-else if chain:
     if action == "ocr":
         if response_payload.get("success"):
@@ -27,8 +31,6 @@ def simulate_frontend_toasts(response_payload):
             toasts.add("Google Sheet updated")
         else:
             toasts.add("Audio uploaded, transcription failed")
-    elif action == "duplicate_check" or details.get("duplicate_found"):
-        toasts.add("Duplicate contact found")
     elif action == "sheet_write" or details.get("saved_to_sheet"):
         if details.get("saved_to_sheet"):
             toasts.add("Saved to Google Sheets")

@@ -343,6 +343,12 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
     if (!res) return;
     const details = res.details || {};
     
+    if (details.duplicate_found || res.action === 'duplicate_check') {
+      clearAllToasts();
+      showToast("Duplicate contact found.", "warning");
+      return;
+    }
+    
     const toast_type = res.status;
     const duplicate_found = details.duplicate_found;
     const saved_to_sheet = details.saved_to_sheet;
