@@ -17,10 +17,13 @@ function ToastContainer({ toasts, onClose }) {
               ? 'bg-red-500/10 border-red-500/30 text-red-400' 
               : t.type === 'warning' 
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : t.type === 'info'
+                  ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
           }`}
+          data-toast-type={t.type}
         >
-          <span>{t.type === 'error' ? '❌' : t.type === 'warning' ? '⚠️' : '✅'}</span>
+          <span>{t.type === 'error' ? '❌' : t.type === 'warning' ? '⚠️' : t.type === 'info' ? 'ℹ️' : '✅'}</span>
           <span>{t.text}</span>
           <button onClick={() => onClose(t.id)} className="ml-auto text-xs opacity-50 hover:opacity-100 pl-2">✕</button>
         </div>
@@ -197,6 +200,14 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
+  const clearAllToasts = () => {
+    setToasts([]);
+  };
+
+  const dismissToastsByType = (type) => {
+    setToasts(prev => prev.filter(t => t.type !== type));
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -332,28 +343,98 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
     if (!res) return;
     const details = res.details || {};
     
+    const toast_type = res.status;
+    const duplicate_found = details.duplicate_found;
+    const saved_to_sheet = details.saved_to_sheet;
+    const whatsapp_sent = details.whatsapp_sent;
+    const response_payload = res;
+    
     if (res.action === 'ocr') {
       if (res.success) {
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast("⚠️ Verification required!", "warning");
       } else {
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast(res.message || "OCR failed.", "error");
       }
     } else if (res.action === 'transcription') {
       if (details.transcription_completed) {
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast("🎙️ Voice note transcribed!", "success");
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast("📊 Google Sheet updated!", "success");
       } else {
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast("⚠️ Audio uploaded, transcription failed.", "warning");
       }
     } else if (res.action === 'duplicate_check' || details.duplicate_found) {
+      dismissToastsByType('success');
+      console.log("TOAST_DEBUG", {
+        toast_type,
+        duplicate_found,
+        saved_to_sheet,
+        whatsapp_sent,
+        response_payload
+      });
       showToast("⚠️ Duplicate contact found", "warning");
     } else if (res.action === 'sheet_write' || details.saved_to_sheet) {
       if (details.saved_to_sheet) {
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast("📊 Saved to Google Sheets", "success");
       }
       if (details.whatsapp_sent) {
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast("📱 WhatsApp notification sent", "success");
       } else {
+        console.log("TOAST_DEBUG", {
+          toast_type,
+          duplicate_found,
+          saved_to_sheet,
+          whatsapp_sent,
+          response_payload
+        });
         showToast("⚠️ WhatsApp failed to send", "warning");
       }
     }
@@ -361,6 +442,7 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
 
   const send = async (formData, displayMsg, audioUrl = null) => {
     if (loading) return;
+    clearAllToasts();
     setLastAttempt({ type: 'send', formData, displayMsg, audioUrl });
     addUserMsg(displayMsg, audioUrl);
     setLoading(true);
@@ -405,6 +487,7 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
 
   const handleConfirm = async (confirmedData) => {
     if (loading) return;
+    clearAllToasts();
     setAwaitingConfirm(false);
     setLoading(true);
     setLastAttempt({ type: 'confirm', data: confirmedData });

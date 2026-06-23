@@ -69,6 +69,16 @@ async def send_message(
         "input_type": input_type,
         "file_data": file_data,
         "messages": [HumanMessage(content=msg_content)],
+        "raw_extraction": None,
+        "confirmed_contact": None,
+        "dedup_result": None,
+        "active_sheet_row": None,
+        "audio_transcript": None,
+        "notification_sent": False,
+        "awaiting_confirmation": False,
+        "enriched_data": None,
+        "ocr_success": None,
+        "transcription_success": None,
     }
 
     # Run the graph
@@ -326,7 +336,7 @@ def make_response_payload(state, action_context: str) -> dict:
             status = "success"
             message = last_ai_message
 
-    return {
+    payload = {
         "success": success,
         "action": action,
         "status": status,
@@ -341,3 +351,11 @@ def make_response_payload(state, action_context: str) -> dict:
             "transcription_completed": transcription_success
         }
     }
+    print("CHAT_DEBUG", {
+        "duplicate_found": duplicate_found,
+        "saved_to_sheet": saved_to_sheet,
+        "whatsapp_sent": whatsapp_sent,
+        "enrichment_completed": enrichment_completed
+    })
+    logger.info(f"CHAT_DEBUG: {dict(duplicate_found=duplicate_found, saved_to_sheet=saved_to_sheet, whatsapp_sent=whatsapp_sent, enrichment_completed=enrichment_completed)}")
+    return payload
