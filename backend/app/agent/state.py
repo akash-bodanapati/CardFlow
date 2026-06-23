@@ -19,3 +19,5 @@ class AgentState(TypedDict):
     notification_sent: bool
     awaiting_confirmation: bool
     enriched_data: Optional[dict]
+    ocr_success: Optional[bool]
+    transcription_success: Optional[bool]

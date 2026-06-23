@@ -120,12 +120,7 @@ async def send_message(
             f"Failed to update session last_message snippet in MongoDB: {db_err}"
         )
 
-    return {
-        "status": "success",
-        "awaiting_confirmation": is_interrupted,
-        "raw_extraction": state.values.get("raw_extraction"),
-        "message": last_ai_message,
-    }
+    return make_response_payload(state, "send_message")
 
 
 @router.get("/{session_id}/messages", response_model=Dict[str, Any])
@@ -229,4 +224,112 @@ async def confirm_extraction(
     except Exception as e:
         logger.error(f"Error updating session label: {e}")
 
-    return {"status": "success", "message": last_ai_message}
+    return make_response_payload(state, "confirm")
+
+
+def make_response_payload(state, action_context: str) -> dict:
+    import os
+    state_values = state.values or {}
+    
+    # Extract feature statuses
+    ocr_success = state_values.get("ocr_success")
+    if ocr_success is None:
+        raw_ext = state_values.get("raw_extraction") or {}
+        ocr_success = "_error" not in raw_ext
+        
+    transcription_success = state_values.get("transcription_success", False)
+
+    duplicate_found = False
+    dedup = state_values.get("dedup_result")
+    if dedup:
+        duplicate_found = dedup.get("is_duplicate", False)
+
+    saved_to_sheet = False
+    active_row = state_values.get("active_sheet_row")
+    if active_row and active_row.get("row_index"):
+        saved_to_sheet = True
+
+    whatsapp_sent = state_values.get("notification_sent", False)
+    
+    enriched_data = state_values.get("enriched_data")
+    enrichment_completed = bool(enriched_data and (enriched_data.get("website") or enriched_data.get("linkedin")))
+
+    # Find the last AI message
+    last_ai_message = ""
+    for m in reversed(state_values.get("messages", [])):
+        msg_type = getattr(m, "type", "") or (m.get("type") if isinstance(m, dict) else "")
+        msg_content = getattr(m, "content", "") or (m.get("content") if isinstance(m, dict) else "")
+        if msg_type == "ai":
+            last_ai_message = msg_content
+            break
+
+    input_type = state_values.get("input_type", "text")
+    
+    if action_context == "confirm":
+        if duplicate_found:
+            action = "duplicate_check"
+            success = False
+            status = "warning"
+            message = last_ai_message or "Duplicate found. Contact already exists."
+        elif saved_to_sheet:
+            action = "sheet_write"
+            success = True
+            if whatsapp_sent:
+                status = "success"
+                message = last_ai_message or "Contact saved successfully. Manager notification sent."
+            else:
+                status = "warning"
+                message = last_ai_message or "Contact saved successfully. Manager notification could not be delivered at this time."
+        else:
+            action = "sheet_write"
+            success = False
+            status = "error"
+            message = "Failed to save contact. Please try again."
+    else:
+        if input_type == "image":
+            action = "ocr"
+            if ocr_success:
+                success = True
+                status = "success"
+                message = last_ai_message or "I extracted the following contact info from the card. Please review and confirm:"
+            else:
+                success = False
+                status = "error"
+                err_detail = (state_values.get("raw_extraction") or {}).get("_error", "")
+                if err_detail == "429":
+                    message = "AI service quota reached. Please retry shortly."
+                elif err_detail == "503":
+                    message = "AI service temporarily unavailable. Please retry."
+                else:
+                    message = "Could not extract contact details. Try a clearer image."
+        elif input_type == "audio":
+            action = "transcription"
+            if transcription_success:
+                success = True
+                status = "success"
+                message = last_ai_message or f"Audio note transcribed and linked to contact: {state_values.get('audio_transcript')}"
+            else:
+                success = False
+                status = "warning"
+                message = last_ai_message or "Audio note uploaded successfully. Transcription is temporarily unavailable."
+        else:
+            action = "text"
+            success = True
+            status = "success"
+            message = last_ai_message
+
+    return {
+        "success": success,
+        "action": action,
+        "status": status,
+        "message": message,
+        "awaiting_confirmation": len(state.next) > 0,
+        "raw_extraction": state_values.get("raw_extraction"),
+        "details": {
+            "duplicate_found": duplicate_found,
+            "saved_to_sheet": saved_to_sheet,
+            "whatsapp_sent": whatsapp_sent,
+            "enrichment_completed": enrichment_completed,
+            "transcription_completed": transcription_success
+        }
+    }

@@ -71,7 +71,7 @@ async def extract_card(state: AgentState) -> Dict[str, Any]:
         msg = AIMessage(
             content="I extracted the following contact info from the card. Please review and confirm:"
         )
-        return {"raw_extraction": extraction, "messages": [msg]}
+        return {"raw_extraction": extraction, "ocr_success": True, "messages": [msg]}
     except Exception as e:
         from google.genai import errors
         if isinstance(e, errors.APIError):
@@ -89,7 +89,8 @@ async def extract_card(state: AgentState) -> Dict[str, Any]:
                 "phone": "",
                 "email": "",
                 "company": "",
-            }
+            },
+            "ocr_success": False
         }
 
 
@@ -363,7 +364,7 @@ async def transcribe_audio(state: AgentState) -> Dict[str, Any]:
             msg_content = "Audio note uploaded successfully, but no active contact session found to link to."
         msg = AIMessage(content=msg_content)
 
-    return {"audio_transcript": transcript, "messages": [msg]}
+    return {"audio_transcript": transcript, "transcription_success": success, "messages": [msg]}
 
 
 async def enrich_company(state: AgentState) -> Dict[str, Any]:

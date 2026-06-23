@@ -328,6 +328,37 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
     }
   };
 
+  const triggerResponseToasts = (res) => {
+    if (!res) return;
+    const details = res.details || {};
+    
+    if (res.action === 'ocr') {
+      if (res.success) {
+        showToast("⚠️ Verification required!", "warning");
+      } else {
+        showToast(res.message || "OCR failed.", "error");
+      }
+    } else if (res.action === 'transcription') {
+      if (details.transcription_completed) {
+        showToast("🎙️ Voice note transcribed!", "success");
+        showToast("📊 Google Sheet updated!", "success");
+      } else {
+        showToast("⚠️ Audio uploaded, transcription failed.", "warning");
+      }
+    } else if (res.action === 'duplicate_check' || details.duplicate_found) {
+      showToast("⚠️ Duplicate contact found", "warning");
+    } else if (res.action === 'sheet_write' || details.saved_to_sheet) {
+      if (details.saved_to_sheet) {
+        showToast("📊 Saved to Google Sheets", "success");
+      }
+      if (details.whatsapp_sent) {
+        showToast("📱 WhatsApp notification sent", "success");
+      } else {
+        showToast("⚠️ WhatsApp failed to send", "warning");
+      }
+    }
+  };
+
   const send = async (formData, displayMsg, audioUrl = null) => {
     if (loading) return;
     setLastAttempt({ type: 'send', formData, displayMsg, audioUrl });
@@ -335,27 +366,13 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
     setLoading(true);
     try {
       const res = await apiClient.sendMessage(sessionId, formData);
-      if (res.status === 'success') {
+      if (res && res.status) {
         if (res.awaiting_confirmation) {
           setAwaitingConfirm(true);
           setRawExtraction(res.raw_extraction);
-          addAgentMsg("I extracted the following contact info from the card. Please review and confirm:");
-          showToast("⚠️ Verification required!", "warning");
-        } else {
-          const reply = res.message || 'Processed successfully.';
-          addAgentMsg(reply);
-          
-          // Toast checks depending on backend response text content
-          if (reply.includes("Duplicate found")) {
-            showToast("⚠️ Duplicate contact found", "warning");
-          } else if (reply.includes("Audio note transcribed")) {
-            showToast("🎙️ Voice note transcribed!", "success");
-            showToast("📊 Google Sheet updated!", "success");
-          } else if (reply.includes("Contact saved")) {
-            showToast("📊 Saved to Google Sheets", "success");
-            showToast("📱 WhatsApp alert sent", "success");
-          }
         }
+        addAgentMsg(res.message || 'Processed successfully.', res.status === 'error');
+        triggerResponseToasts(res);
       } else {
         addAgentMsg('Something went wrong. Please try again in a moment.', true);
         showToast("Something went wrong.", "error");
@@ -395,14 +412,12 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
       const res = await apiClient.confirmExtraction(sessionId, confirmedData);
       addUserMsg(`✓ Confirmed: ${confirmedData.name} (${confirmedData.company})`);
       
-      const reply = res.message || '✅ Contact saved successfully.';
-      addAgentMsg(reply);
-      
-      showToast("📊 Saved to Google Sheets", "success");
-      if (reply.includes("could not be delivered") || reply.includes("failed to send")) {
-        showToast("⚠️ WhatsApp failed to send", "warning");
+      if (res && res.status) {
+        addAgentMsg(res.message || '✅ Contact saved successfully.', res.status === 'error');
+        triggerResponseToasts(res);
       } else {
-        showToast("📱 WhatsApp notification sent", "success");
+        addAgentMsg('Something went wrong. Please try again in a moment.', true);
+        showToast("Something went wrong.", "error");
       }
     } catch (e) {
       console.error(e);
