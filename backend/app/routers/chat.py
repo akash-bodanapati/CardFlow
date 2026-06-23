@@ -79,8 +79,8 @@ async def send_message(
         ):
             pass
     except Exception as e:
-        logger.error(f"Error executing LangGraph: {e}")
-        raise HTTPException(status_code=500, detail=f"Graph execution failed: {str(e)}")
+        logger.exception("Error executing LangGraph")
+        raise HTTPException(status_code=500, detail="Something went wrong. Please try again in a moment.")
 
     state = await graph.aget_state(config)
 
@@ -191,9 +191,9 @@ async def confirm_extraction(
     try:
         await graph.ainvoke(Command(resume=payload.dict()), config=config)
     except Exception as e:
-        logger.error(f"Error resuming graph: {e}")
+        logger.exception("Error resuming graph")
         raise HTTPException(
-            status_code=500, detail=f"Failed to resume workflow: {str(e)}"
+            status_code=500, detail="Something went wrong. Please try again in a moment."
         )
 
     # Extract final AI response from the state after graph resume

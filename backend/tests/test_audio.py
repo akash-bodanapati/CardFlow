@@ -31,7 +31,8 @@ async def test_transcribe_english_success() -> None:
         audio_service.client.models, "generate_content", return_value=mock_response
     ) as mock_gen:
         result = await audio_service.transcribe(b"RIFFdummywavbytes")
-        assert result == "Hello, this is a clean English transcript."
+        assert result["success"] is True
+        assert result["transcript"] == "Hello, this is a clean English transcript."
         mock_gen.assert_called_once()
 
 
@@ -51,7 +52,8 @@ async def test_transcribe_mixed_audio_retry() -> None:
         side_effect=[response_1, response_2],
     ) as mock_gen:
         result = await audio_service.transcribe(b"RIFFdummywavbytes")
-        assert result == "Hello Priya Sharma"
+        assert result["success"] is True
+        assert result["transcript"] == "Hello Priya Sharma"
         assert mock_gen.call_count == 2
 
 
@@ -59,4 +61,5 @@ async def test_transcribe_mixed_audio_retry() -> None:
 async def test_transcribe_empty_audio_graceful_failure() -> None:
     """Test empty audio results in graceful failure (empty string)."""
     result = await audio_service.transcribe(b"")
-    assert result == ""
+    assert result["success"] is False
+    assert result["transcript"] == ""

@@ -39,7 +39,8 @@ Example output:
 
 class VisionService:
     def __init__(self):
-        self.client = genai.Client(api_key=config.gemini_api_key)
+        api_key = config.gemini_ocr_key or config.gemini_api_key
+        self.client = genai.Client(api_key=api_key)
         self.model = VISION_MODEL
 
     async def extract_contact_info(self, image_data: bytes) -> dict:

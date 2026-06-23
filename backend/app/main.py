@@ -14,7 +14,48 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
 )
 logger = logging.getLogger("cardflow")
+
+ocr_ok = bool(config.gemini_ocr_key or config.gemini_api_key)
+audio_ok = bool(config.gemini_audio_key or config.gemini_api_key)
+enrichment_ok = bool(config.gemini_enrichment_key or config.gemini_api_key)
+sheets_ok = bool(config.google_sheet_id and os.path.exists(config.google_application_credentials))
+whatsapp_ok = bool(config.whatsapp_token and config.whatsapp_phone_number_id and config.manager_phone_number)
+
+if config.supabase_url and config.supabase_key:
+    storage_provider = "Supabase Storage"
+    storage_ok = True
+elif config.cloudinary_cloud_name and config.cloudinary_upload_preset:
+    storage_provider = "Cloudinary"
+    storage_ok = True
+else:
+    storage_provider = "Local Storage"
+    storage_ok = False
+
 logger.info("Initializing CardFlow API server")
+logger.info(f"{'✓' if ocr_ok else '✗'} OCR key configured")
+if not ocr_ok:
+    logger.warning("  WARNING: OCR feature will be disabled (Missing GEMINI_OCR_KEY and fallback GEMINI_API_KEY)")
+
+logger.info(f"{'✓' if audio_ok else '✗'} Audio key configured")
+if not audio_ok:
+    logger.warning("  WARNING: Audio feature will be disabled (Missing GEMINI_AUDIO_KEY and fallback GEMINI_API_KEY)")
+
+logger.info(f"{'✓' if enrichment_ok else '✗'} Enrichment key configured")
+if not enrichment_ok:
+    logger.warning("  WARNING: Enrichment feature will be disabled (Missing GEMINI_ENRICHMENT_KEY and fallback GEMINI_API_KEY)")
+
+logger.info(f"{'✓' if sheets_ok else '✗'} Google Sheets configured")
+if not sheets_ok:
+    logger.warning("  WARNING: Google Sheets syncing will be disabled (Missing GOOGLE_SHEET_ID or credentials file)")
+
+logger.info(f"{'✓' if whatsapp_ok else '✗'} WhatsApp configured")
+if not whatsapp_ok:
+    logger.warning("  WARNING: WhatsApp alerts will be disabled (Missing WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, or MANAGER_PHONE_NUMBER)")
+
+logger.info(f"{'✓' if storage_ok else '✗'} Persistent Storage configured")
+logger.info(f"  Active Storage Provider: {storage_provider}")
+if not storage_ok:
+    logger.warning("  WARNING: Persistent audio storage is NOT configured. Uploaded voice notes will be lost after redeploys or restarts.")
 
 app = FastAPI(
     title="CardFlow API",
@@ -57,3 +98,17 @@ def read_root():
 def health_check():
     """Health check endpoint for container uptime and readiness monitoring."""
     return {"status": "ok"}
+
+
+@app.get("/health/summary")
+@app.get("/api/health/summary")
+def health_summary():
+    """Returns a health summary showing which features are configured, without leaking secrets."""
+    return {
+        "ocr": bool(config.gemini_ocr_key or config.gemini_api_key),
+        "audio": bool(config.gemini_audio_key or config.gemini_api_key),
+        "enrichment": bool(config.gemini_enrichment_key or config.gemini_api_key),
+        "google_sheets": bool(config.google_sheet_id and os.path.exists(config.google_application_credentials)),
+        "whatsapp": bool(config.whatsapp_token and config.whatsapp_phone_number_id and config.manager_phone_number),
+        "storage": bool((config.supabase_url and config.supabase_key) or (config.cloudinary_cloud_name and config.cloudinary_upload_preset))
+    }

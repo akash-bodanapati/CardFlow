@@ -102,9 +102,10 @@ class SheetsService:
         if not service:
             raise ValueError("Sheets service not initialized")
 
-        import datetime
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
 
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
         values = [[timestamp, name, phone, email, company, "", "", session_id]]
         body = {"values": values}
 

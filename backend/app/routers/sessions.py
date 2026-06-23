@@ -25,13 +25,15 @@ async def create_session() -> Dict[str, str]:
     try:
         client = MongoClient(config.mongo_uri)
         db = client["cardflow"]
-        date_str = datetime.datetime.now().strftime("%b %d")
+        from zoneinfo import ZoneInfo
+        now_ist = datetime.datetime.now(ZoneInfo("Asia/Kolkata"))
+        date_str = now_ist.strftime("%b %d")
         label = f"New Session · {date_str}"
         db["sessions"].insert_one(
             {
                 "session_id": session_id,
                 "label": label,
-                "created_at": datetime.datetime.now(),
+                "created_at": now_ist,
             }
         )
         logger.info(f"Successfully created session: {session_id}")

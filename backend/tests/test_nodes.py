@@ -145,14 +145,14 @@ async def test_transcribe_audio_live_lookup_and_fallback() -> None:
     with patch("app.agent.nodes.audio_service.transcribe", new_callable=AsyncMock) as mock_transcribe, \
          patch("app.agent.nodes.sheets_service.get_all_rows", new_callable=AsyncMock) as mock_get_all_rows, \
          patch("app.agent.nodes.sheets_service.update_row_audio", new_callable=AsyncMock) as mock_update_row_audio, \
-         patch("app.agent.nodes.get_validated_public_audio_url") as mock_get_url:
+         patch("app.agent.nodes.storage_service.upload_audio", new_callable=AsyncMock) as mock_upload_audio:
          
-        mock_transcribe.return_value = "This is a transcribe test"
+        mock_transcribe.return_value = {"success": True, "transcript": "This is a transcribe test"}
         mock_get_all_rows.return_value = [
             {"Session ID": "session-test-live-123", "_row_index": 5},
             {"Session ID": "other-session", "_row_index": 6}
         ]
-        mock_get_url.return_value = "https://public-url/session-test-live-123.wav"
+        mock_upload_audio.return_value = "https://public-url/session-test-live-123.wav"
         
         with patch("os.makedirs"), patch("builtins.open", mock_open()):
             res = await transcribe_audio(state)
@@ -168,13 +168,13 @@ async def test_transcribe_audio_live_lookup_and_fallback() -> None:
     with patch("app.agent.nodes.audio_service.transcribe", new_callable=AsyncMock) as mock_transcribe, \
          patch("app.agent.nodes.sheets_service.get_all_rows", new_callable=AsyncMock) as mock_get_all_rows, \
          patch("app.agent.nodes.sheets_service.update_row_audio", new_callable=AsyncMock) as mock_update_row_audio, \
-         patch("app.agent.nodes.get_validated_public_audio_url") as mock_get_url:
-         
-        mock_transcribe.return_value = "Fallback transcript test"
+         patch("app.agent.nodes.storage_service.upload_audio", new_callable=AsyncMock) as mock_upload_audio:
+          
+        mock_transcribe.return_value = {"success": True, "transcript": "Fallback transcript test"}
         mock_get_all_rows.return_value = [
             {"Session ID": "non-matching-session", "_row_index": 5}
         ]
-        mock_get_url.return_value = "https://public-url/session-test-live-123.wav"
+        mock_upload_audio.return_value = "https://public-url/session-test-live-123.wav"
         
         with patch("os.makedirs"), patch("builtins.open", mock_open()):
             res = await transcribe_audio(state)

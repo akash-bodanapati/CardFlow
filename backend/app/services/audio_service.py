@@ -62,14 +62,19 @@ def contains_non_english(text: str) -> bool:
 
 class AudioService:
     def __init__(self):
-        self.client = genai.Client(api_key=config.gemini_api_key)
+        api_key = config.gemini_audio_key or config.gemini_api_key
+        self.client = genai.Client(api_key=api_key)
         self.model = "gemini-2.5-flash"
 
-    async def transcribe(self, audio_data: bytes) -> str:
+    async def transcribe(self, audio_data: bytes) -> dict:
         """Transcribe audio using Gemini 2.5 Flash with normalization and English-only retry logic."""
         if not audio_data:
             logger.warning("Empty audio data passed to AudioService")
-            return ""
+            return {
+                "success": False,
+                "transcript": "",
+                "user_message": "No audio data provided."
+            }
 
         logger.info("Transcribing audio via Gemini 2.5 Flash...")
         try:
@@ -110,10 +115,18 @@ class AudioService:
                 normalized = normalize_text(raw_transcript)
 
             logger.info(f"Gemini Audio Transcript: {normalized}")
-            return normalized
+            return {
+                "success": True,
+                "transcript": normalized,
+                "user_message": None
+            }
         except Exception as e:
-            logger.exception("Audio transcription failed")
-            return f"[Transcription Failed: {e}]"
+            logger.exception("Audio transcription failed due to exception")
+            return {
+                "success": False,
+                "transcript": None,
+                "user_message": "Audio note uploaded successfully. Transcription is temporarily unavailable."
+            }
 
 
 audio_service = AudioService()

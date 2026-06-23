@@ -11,7 +11,9 @@ from app.agent.state import AgentState
 from app.config import config
 from app.services.audio_service import audio_service
 from app.services.dedup_service import is_duplicate
+from app.services.enrichment_service import enrichment_service
 from app.services.sheets_service import sheets_service
+from app.services.storage_service import storage_service
 from app.services.vision_service import vision_service
 from app.services.whatsapp_service import whatsapp_service
 
@@ -260,7 +262,7 @@ async def notify_whatsapp(state: AgentState) -> Dict[str, Any]:
         content = "Contact saved successfully and WhatsApp notification sent."
     else:
         content = (
-            "Contact saved successfully, but the WhatsApp notification failed to send."
+            "Contact saved successfully.\nManager notification could not be delivered at this time."
         )
     msg = AIMessage(content=content)
     logger.info(f"WhatsApp notification dispatch status: {success}")
@@ -300,7 +302,11 @@ async def transcribe_audio(state: AgentState) -> Dict[str, Any]:
     """
     logger.info("LangGraph Node: transcribe_audio - transcribing voice note")
     file_data = state.get("file_data") or b""
-    transcript = await audio_service.transcribe(file_data)
+    
+    transcribe_res = await audio_service.transcribe(file_data)
+    success = transcribe_res.get("success", False)
+    transcript = transcribe_res.get("transcript") or ""
+    user_msg = transcribe_res.get("user_message")
 
     active_row = state.get("active_sheet_row")
     session_id = state.get("session_id", "default")
@@ -324,14 +330,8 @@ async def transcribe_audio(state: AgentState) -> Dict[str, Any]:
         logger.info(f"Fallback: row_index resolved from state: {row_index}")
 
     if row_index:
-        os.makedirs("uploads", exist_ok=True)
-        file_path = f"uploads/{session_id}.wav"
-        with open(file_path, "wb") as f:
-            f.write(file_data)
-        logger.info(f"Saved audio file locally to {file_path}")
-
         try:
-            audio_url = get_validated_public_audio_url(session_id)
+            audio_url = await storage_service.upload_audio(session_id, file_data)
             logger.info(f"Column mapping used: Audio URL -> Column F, Audio Notes -> Column G")
             await sheets_service.update_row_audio(
                 row_index=row_index,
@@ -341,20 +341,27 @@ async def transcribe_audio(state: AgentState) -> Dict[str, Any]:
             logger.info(
                 f"Updated Google Sheet row successfully - row number updated: {row_index}"
             )
-            msg = AIMessage(
-                content=f"Audio note transcribed and linked to contact: {transcript}"
-            )
+            if success:
+                msg_content = f"Audio note transcribed and linked to contact: {transcript}"
+            else:
+                msg_content = user_msg or "Audio note uploaded successfully. Transcription is temporarily unavailable."
+            msg = AIMessage(content=msg_content)
         except ValueError as e:
             logger.error(f"Audio URL validation failed: {e}")
+            msg = AIMessage(content=f"Error linking audio: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to update row audio: {e}")
             msg = AIMessage(content=f"Error linking audio: {str(e)}")
     else:
         logger.warning(
             "Voice note received but no active contact row (live or in state) could be found. Session ID: %s",
             session_id,
         )
-        msg = AIMessage(
-            content="Transcribed audio, but no active contact session found to link to."
-        )
+        if success:
+            msg_content = "Transcribed audio, but no active contact session found to link to."
+        else:
+            msg_content = "Audio note uploaded successfully, but no active contact session found to link to."
+        msg = AIMessage(content=msg_content)
 
     return {"audio_transcript": transcript, "messages": [msg]}
 
@@ -375,34 +382,11 @@ async def enrich_company(state: AgentState) -> Dict[str, Any]:
     if not company:
         logger.info("No company name present in contact. Skipping enrichment.")
         return {}
-    try:
-        prompt = (
-            f"Provide the official website URL and LinkedIn page URL for the company: '{company}'. "
-            "Return ONLY a JSON object with keys 'website' and 'linkedin'. If unknown, return empty strings."
-        )
-        response = vision_service.client.models.generate_content(
-            model=vision_service.model,
-            contents=prompt,
-        )
-        raw_response_text = getattr(response, "text", "")
-        logger.info(f"Raw Gemini response for company enrichment: '{raw_response_text}'")
-
-        text = raw_response_text.strip()
-        if text.startswith("```"):
-            text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
-            text = re.sub(r"```$", "", text).strip()
-            
-        try:
-            data = json.loads(text)
-            logger.info(f"Company enrichment result for {company}: {data}")
-            return {"enriched_data": data}
-        except json.JSONDecodeError as decode_err:
-            logger.error(f"JSONDecodeError parsing company enrichment response. Raw text: '{text}'. Error: {decode_err}")
-            return {}
-            
-    except Exception as e:
-        logger.warning(f"Failed to enrich company {company}: {e}")
-        return {}
+    
+    enriched_data = await enrichment_service.enrich_company_details(company)
+    if enriched_data:
+        return {"enriched_data": enriched_data}
+    return {}
 
 
 async def process_text(state: AgentState) -> Dict[str, Any]:

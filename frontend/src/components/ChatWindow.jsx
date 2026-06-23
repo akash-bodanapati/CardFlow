@@ -95,7 +95,7 @@ function UserBubble({ id, text, timestamp, sessionId, audioUrl }) {
   );
 }
 
-function AgentBubble({ text, isError, timestamp, theme }) {
+function AgentBubble({ text, isError, timestamp, theme, onRetry }) {
   const isDark = theme === 'dark';
   return (
     <div className="flex justify-start items-start gap-3">
@@ -104,15 +104,25 @@ function AgentBubble({ text, isError, timestamp, theme }) {
       }`}>
         🤖
       </div>
-      <div className="flex flex-col gap-1">
-        <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-md transition-colors duration-150 ${
+      <div className="flex flex-col gap-1 w-full max-w-[70%]">
+        <div className={`px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-md transition-colors duration-150 ${
           isError 
             ? 'bg-red-900/10 text-red-400 border border-red-500/20' 
             : isDark 
               ? 'bg-[#1e2130] text-slate-200 border border-slate-800/80' 
               : 'bg-[#f1f5f9] text-slate-800 border border-slate-200/50'
         }`}>
-          {text}
+          <div>{text}</div>
+          {isError && onRetry && (
+            <div className="mt-2.5">
+              <button
+                onClick={onRetry}
+                className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-150 active:scale-[0.98] shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🔄</span> Retry
+              </button>
+            </div>
+          )}
         </div>
         <span className="text-[10px] text-slate-500 px-1 font-medium">{timestamp}</span>
       </div>
@@ -149,6 +159,8 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
   const [awaitingConfirm, setAwaitingConfirm] = useState(false);
   const [rawExtraction, setRawExtraction] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [lastAttempt, setLastAttempt] = useState(null);
+  const [loadingSeconds, setLoadingSeconds] = useState(0);
   
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
@@ -157,6 +169,21 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
   const endRef = useRef(null);
   const imageInputRef = useRef(null);
   const audioInputRef = useRef(null);
+
+  useEffect(() => {
+    let interval;
+    if (loading && messages.length === 0) {
+      setLoadingSeconds(0);
+      interval = setInterval(() => {
+        setLoadingSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      setLoadingSeconds(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [loading, messages.length]);
 
   const showToast = (toastText, type = 'success') => {
     const id = Date.now() + Math.random().toString();
@@ -292,7 +319,18 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
     timestamp: getCurrentTimeString() 
   }]);
 
+  const handleRetry = () => {
+    if (!lastAttempt) return;
+    if (lastAttempt.type === 'confirm') {
+      handleConfirm(lastAttempt.data);
+    } else {
+      send(lastAttempt.formData, lastAttempt.displayMsg, lastAttempt.audioUrl);
+    }
+  };
+
   const send = async (formData, displayMsg, audioUrl = null) => {
+    if (loading) return;
+    setLastAttempt({ type: 'send', formData, displayMsg, audioUrl });
     addUserMsg(displayMsg, audioUrl);
     setLoading(true);
     try {
@@ -319,13 +357,13 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
           }
         }
       } else {
-        addAgentMsg('Failed to process message.', true);
-        showToast("Error processing request.", "error");
+        addAgentMsg('Something went wrong. Please try again in a moment.', true);
+        showToast("Something went wrong.", "error");
       }
     } catch (e) {
       console.error(e);
-      addAgentMsg('Error processing request.', true);
-      showToast("Network request failed.", "error");
+      addAgentMsg('Something went wrong. Please try again in a moment.', true);
+      showToast("Something went wrong.", "error");
     }
     setLoading(false);
   };
@@ -349,8 +387,10 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
   };
 
   const handleConfirm = async (confirmedData) => {
+    if (loading) return;
     setAwaitingConfirm(false);
     setLoading(true);
+    setLastAttempt({ type: 'confirm', data: confirmedData });
     try {
       const res = await apiClient.confirmExtraction(sessionId, confirmedData);
       addUserMsg(`✓ Confirmed: ${confirmedData.name} (${confirmedData.company})`);
@@ -359,15 +399,15 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
       addAgentMsg(reply);
       
       showToast("📊 Saved to Google Sheets", "success");
-      if (reply.includes("failed to send")) {
+      if (reply.includes("could not be delivered") || reply.includes("failed to send")) {
         showToast("⚠️ WhatsApp failed to send", "warning");
       } else {
         showToast("📱 WhatsApp notification sent", "success");
       }
     } catch (e) {
       console.error(e);
-      addAgentMsg('Failed to save contact. Please try again.', true);
-      showToast("Failed to confirm contact details.", "error");
+      addAgentMsg('Something went wrong. Please try again in a moment.', true);
+      showToast("Something went wrong.", "error");
     }
     setLoading(false);
   };
@@ -417,22 +457,35 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-        {loading && messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center space-y-4">
-            <div className="w-9 h-9 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-            <div className="space-y-1">
-              <p className={`text-sm font-bold ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>Loading session state...</p>
-              <p className={`text-xs max-w-xs ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>
-                Connecting to backend. If the service was sleeping (cold start), this might take up to 60 seconds.
-              </p>
+        {loading && messages.length === 0 ? (() => {
+          let loadingTitle = "Loading your workspace...";
+          let loadingSubtitle = "Connecting securely to CardFlow services.";
+
+          if (loadingSeconds > 45) {
+            loadingTitle = "Still waking up backend services...";
+            loadingSubtitle = "Almost there.";
+          } else if (loadingSeconds > 15) {
+            loadingTitle = "Starting backend services...";
+            loadingSubtitle = "This can take a few moments on free hosting.";
+          }
+
+          return (
+            <div className="flex flex-col items-center justify-center py-24 text-center space-y-4 animate-fade-in">
+              <div className="w-9 h-9 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="space-y-1">
+                <p className={`text-sm font-bold ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>{loadingTitle}</p>
+                <p className={`text-xs max-w-xs ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>
+                  {loadingSubtitle}
+                </p>
+              </div>
             </div>
-          </div>
-        ) : (
+          );
+        })() : (
           <>
             {messages.map((m, i) =>
               m.type === 'user'
                 ? <UserBubble key={m.id || i} id={m.id || `user-msg-${i}`} text={m.text} timestamp={m.timestamp} sessionId={sessionId} audioUrl={m.audioUrl} />
-                : <AgentBubble key={m.id || i} id={m.id || `agent-msg-${i}`} text={m.text} isError={m.isError} timestamp={m.timestamp} theme={theme} />
+                : <AgentBubble key={m.id || i} id={m.id || `agent-msg-${i}`} text={m.text} isError={m.isError} timestamp={m.timestamp} theme={theme} onRetry={i === messages.length - 1 ? handleRetry : undefined} />
             )}
             
             {loading && <TypingIndicator theme={theme} />}
