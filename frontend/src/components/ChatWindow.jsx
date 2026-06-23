@@ -189,6 +189,7 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
   }, [loading, messages.length]);
 
   const showToast = (toastText, type = 'success') => {
+    console.trace("SHOW_TOAST", toastText, type);
     const id = Date.now() + Math.random().toString();
     setToasts(prev => [...prev, { id, text: toastText, type }]);
     setTimeout(() => {
@@ -342,6 +343,14 @@ export default function ChatWindow({ sessionId, theme, toggleTheme }) {
   const triggerResponseToasts = (res) => {
     if (!res) return;
     const details = res.details || {};
+    
+    console.log("TOAST_DEBUG", {
+      action: res.action,
+      status: res.status,
+      duplicate_found: details.duplicate_found,
+      saved_to_sheet: details.saved_to_sheet,
+      whatsapp_sent: details.whatsapp_sent
+    });
     
     if (details.duplicate_found || res.action === 'duplicate_check') {
       clearAllToasts();
