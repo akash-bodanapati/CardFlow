@@ -16,6 +16,8 @@ def test_payload_duplicate_detected():
     state = DummyState({
         "input_type": "text",
         "dedup_result": {"is_duplicate": True},
+        "active_sheet_row": {"row_index": 12},
+        "notification_sent": True,
         "messages": [{"type": "ai", "content": "Duplicate found! Contact already exists: Priya"}]
     })
     res = make_response_payload(state, "confirm")
@@ -24,6 +26,8 @@ def test_payload_duplicate_detected():
     assert res["status"] == "warning"
     assert "Duplicate found" in res["message"]
     assert res["details"]["duplicate_found"] is True
+    assert res["details"]["saved_to_sheet"] is False
+    assert res["details"]["whatsapp_sent"] is False
 
 
 def test_payload_sheet_save_success_whatsapp_success():

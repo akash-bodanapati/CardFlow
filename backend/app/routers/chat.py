@@ -263,7 +263,15 @@ def make_response_payload(state, action_context: str) -> dict:
             last_ai_message = msg_content
             break
 
+    # Enforce strict assertions and state isolation to prevent LangGraph state pollution
+    if duplicate_found:
+        saved_to_sheet = False
+        whatsapp_sent = False
+        enrichment_completed = False
+
     input_type = state_values.get("input_type", "text")
+    if input_type != "audio":
+        transcription_success = False
     
     if action_context == "confirm":
         if duplicate_found:
